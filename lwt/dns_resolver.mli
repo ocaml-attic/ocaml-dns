@@ -16,11 +16,11 @@
 
 open Dns.Name
 open Dns.Packet
+open Dns.Protocol
 open Cstruct
 
-exception Dns_resolve_timeout
-
 type t = {
+  client : (module CLIENT);
   servers : (string * int) list;
   search_domains : string list;
 }
@@ -33,7 +33,7 @@ type config = [
 (** Create a resolver instance that either uses the system
     /etc/resolv.conf, or a statically specified preference
   *)
-val create : ?config:config -> unit -> t Lwt.t
+val create : ?client:(module CLIENT) -> ?config:config -> unit -> t Lwt.t
 
 (** Lookup a {! domain_name }.
 
@@ -58,5 +58,3 @@ val resolve : t -> ?dnssec:bool -> q_class -> q_type ->
   domain_name -> Dns.Packet.t Lwt.t
 
 val send_pkt : t -> Dns.Packet.t -> Dns.Packet.t Lwt.t
-val build_query : ?dnssec:bool -> q_class -> q_type ->
-  Name.domain_name -> Dns.Packet.t

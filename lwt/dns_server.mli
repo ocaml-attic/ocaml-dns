@@ -1,5 +1,6 @@
 (*
  * Copyright (c) 2011 Anil Madhavapeddy <anil@recoil.org>
+ * Copyright (c) 2013 David Sheets <sheets@alum.mit.edu>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -16,29 +17,47 @@
 
 (** Given a source address and a port, return a bound file descriptor and
     source sockaddr suitable for passing to the [listen] functions *)
-val bind_fd : 
+val bind_fd :
   address:string -> port:int -> (Lwt_unix.file_descr * Lwt_unix.sockaddr) Lwt.t
 
-(** DNS responder function.
-    @param src Server sockaddr
-    @param dst Client sockaddr 
-    @param Query packet
-    @return Answer packet
+type 'a process =
+  src:Lwt_unix.sockaddr -> dst:Lwt_unix.sockaddr -> 'a ->
+  Dns.Query.answer option Lwt.t
+
+module type PROCESSOR = sig
+  include Dns.Protocol.SERVER
+
+  (** DNS responder function.
+      @param src Server sockaddr
+      @param dst Client sockaddr
+      @param Query packet
+      @return Answer packet
+  *)
+  val process : context process
+end
+
+type 'a processor = (module PROCESSOR with type context = 'a)
+
+val processor_of_process : Dns.Packet.t process -> Dns.Packet.t processor
+
+val process_of_zonebuf : string -> Dns.Packet.t process
+
+val eventual_process_of_zonefile : string -> Dns.Packet.t process Lwt.t
+
+(** General listening function for DNS servers. Pass in the [fd] and
+    [src] from calling [bind_fd] and supply a [processor] which
+    deserializes the wire format, generates a DNS response packet,
+    and serializes it into the wire format
 *)
-type dnsfn = 
-    src:Lwt_unix.sockaddr -> dst:Lwt_unix.sockaddr 
-    -> Dns.Packet.t -> Dns.Query.query_answer option Lwt.t
+val listen :
+  fd:Lwt_unix.file_descr -> src:Lwt_unix.sockaddr
+  -> processor:(module PROCESSOR) -> unit Lwt.t
 
-(** General listening function for dynamic DNS servers. Pass in the [fd] and
-    [src] from calling [bind_fd] and supply a [dnsfn] which responds with a
-    response DNS packet
-*)
-val listen : 
-  fd:Lwt_unix.file_descr -> src:Lwt_unix.sockaddr -> dnsfn:dnsfn -> unit Lwt.t
+val serve_with_processor :
+  address:string -> port:int -> processor:(module PROCESSOR) -> unit Lwt.t
 
-val listen_with_zonebuf : 
-  address:string -> port:int -> zonebuf:string -> mode:[ `none ] -> unit Lwt.t
+val serve_with_zonebuf :
+  address:string -> port:int -> zonebuf:string -> unit Lwt.t
 
-val listen_with_zonefile : 
+val serve_with_zonefile :
   address:string -> port:int -> zonefile:string -> unit Lwt.t
-

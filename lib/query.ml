@@ -28,7 +28,7 @@ module H = Hashcons
 
 (* We answer a query with RCODE, AA, ANSWERS, AUTHORITY and ADDITIONAL *)
 
-type query_answer = {
+type answer = {
   rcode : Packet.rcode;
   aa: bool;
   answer: Packet.rr list;
@@ -36,7 +36,52 @@ type query_answer = {
   additional: Packet.rr list;
 }
 
-let answer_query ?(dnssec=false) qname qtype trie =
+let response_of_answer query answer =
+  (*let edns_rec =
+    try
+    List.find (fun rr -> ) query.additionals
+    with Not_found -> []
+    in *)
+  let detail = {
+    Packet.qr=Packet.Response; opcode=Packet.Standard; aa=answer.aa;
+    tc=false; rd=Packet.(query.detail.rd); ra=false; rcode=answer.rcode
+  } in
+  Packet.({
+    id=query.id; detail; questions=query.questions;
+    answers=answer.answer;
+    authorities=answer.authority;
+    additionals=answer.additional;
+  })
+
+let answer_of_response ?(preserve_aa=false) ({
+  Packet.detail={ Packet.rcode; aa };
+  answers; authorities; additionals;
+}) = { rcode; aa = if preserve_aa then aa else false;
+       answer=answers;
+       authority=authorities;
+       additional=additionals;
+     }
+
+let create ?(dnssec=false) ~id q_class q_type q_name =
+  let open Packet in
+  let detail = {
+    qr=Query; opcode=Standard;
+    aa=true; tc=false; rd=true; ra=false; rcode=NoError;
+  } in
+  let additionals =
+    if dnssec then
+      [ ( {
+        name=[]; cls=RR_IN; ttl=0l;
+        rdata=(EDNS0(1500, 0, true, []));} ) ]
+    else
+      []
+  in
+  let question = { q_name; q_type; q_class } in
+  { id; detail; questions=[question];
+    answers=[]; authorities=[]; additionals;
+  }
+
+let answer ?(dnssec=false) qname qtype trie =
 
   let aa_flag = ref true in
   let ans_rrs = ref [] in

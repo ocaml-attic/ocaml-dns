@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
-open Lwt 
+open Lwt
 open Printf
 
 let time_rsrc_record () =
@@ -31,19 +31,17 @@ let dnsfn ~src ~dst query =
   let open Dns.Packet in
       match query.questions with
         | q::_ -> (* Just take the first question *)
-            return (Some 
-              Dns.Query.({ 
-                rcode=NoError; aa=true; 
-                answer=[ time_rsrc_record () ]; authority=[]; additional=[]; 
+            return (Some
+              Dns.Query.({
+                rcode=NoError; aa=true;
+                answer=[ time_rsrc_record () ]; authority=[]; additional=[];
               })
             )
         | _ -> return None (* No questions in packet *)
 
-let listen ~address ~port =
-  lwt fd, src = Dns_server.bind_fd ~address ~port in
-  Dns_server.listen ~fd ~src ~dnsfn
-
 let _ =
   let address = "0.0.0.0" in
   let port = 5354 in
-  Lwt_main.run (listen ~address ~port)
+  let open Dns_server in
+  let processor = (processor_of_process dnsfn :> (module PROCESSOR)) in
+  Lwt_main.run (serve_with_processor ~address ~port ~processor)
